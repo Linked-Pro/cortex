@@ -1,82 +1,26 @@
-version: 2.1
-
-commands:
-  return-if-not-deployed-branch:
-    description: >-
-      Exit and succeed this build step if it should not deploy images to DockerHub / upload CLI to AWS
-    steps:
-      - run:
-          name: Exit build step if should not be deployed
-          command: |
-            if ! ([[ "$CIRCLE_BRANCH" =~ ^[0-9]+\.[0-9]+$ ]] || [[ "$CIRCLE_BRANCH" == "master" ]]); then
-              echo "Exiting build step for branch which should not be deployed ($CIRCLE_BRANCH)"
-              circleci step halt
-            fi
-  install-go:
-    steps:
-      - run:
-          name: Install Go
-          command: |
-            wget https://dl.google.com/go/go1.14.2.linux-amd64.tar.gz
-            sudo tar -C /usr/local -xzf go1.14.2.linux-amd64.tar.gz
-            rm -rf go*.tar.gz
-            echo 'export PATH=$PATH:/usr/local/go/bin' >> $BASH_ENV
-            echo 'export PATH=$PATH:~/go/bin' >> $BASH_ENV
-
+# Golang CircleCI 2.0 configuration file
+#
+# Check https://circleci.com/docs/2.0/language-go/ for more details
+version: 2
 jobs:
-  test:
-    docker:
-      - image: circleci/python:3.6
-    steps:
-      - checkout
-      - setup_remote_docker
-      - install-go
-      - run: go get -u -v golang.org/x/lint/golint
-      - run: sudo pip install black
-      - run:
-          name: Lint
-          command: make lint
-      - run:
-          name: Go Tests
-          command: make test-go
-      - run:
-          name: Python Tests
-          command: make test-python
-  build-and-deploy:
-    docker:
-      - image: circleci/python:3.6
-    steps:
-      - checkout
-      - setup_remote_docker
-      - install-go
-      - run: make ci-build-images
-      - run: make ci-build-cli
-      - return-if-not-deployed-branch
-      - run: sudo pip install awscli
-      - run:
-          command: make ci-push-images
-          no_output_timeout: 20m
-      - run: make ci-build-and-upload-cli
-
-workflows:
-  version: 2.1
   build:
-    jobs:
-      - test
-      - build-and-deploy-approval:
-          type: approval
-          requires:
-            - test
-          filters:
-            branches:
-              only:
-                - /^[0-9]+\.[0-9]+$/
-      - build-and-deploy:
-          requires:
-            - test
-            - build-and-deploy-approval
-          filters:
-            branches:
-              only:
-                - master
-                - /^[0-9]+\.[0-9]+$/
+    docker:
+      # specify the version
+      - image: circleci/golang:1.9
+
+      # Specify service dependencies here if necessary
+      # CircleCI maintains a library of pre-built images
+      # documented at https://circleci.com/docs/2.0/circleci-images/
+      # - image: circleci/postgres:9.4
+
+    #### TEMPLATE_NOTE: go expects specific checkout path representing url
+    #### expecting it in the form of
+    ####   /go/src/github.com/circleci/go-tool
+    ####   /go/src/bitbucket.org/circleci/go-tool
+    working_directory: /go/src/github.com/{{ORG_NAME}}/{{REPO_NAME}}
+    steps:
+      - checkout
+
+      # specify any bash command here prefixed with `run: `
+      - run: go get -v -t -d ./...
+      - run: go test -v ./...
